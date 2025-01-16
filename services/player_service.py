@@ -2,11 +2,15 @@
 # Service
 # ------------------------------------------------------------------------------
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from models.player_model import PlayerModel
 from schemas.player_schema import Player
+import sqlite3
+# ------------------------------------------------------------------------------
+# Service
+# ------------------------------------------------------------------------------
+
 
 # Create -----------------------------------------------------------------------
 
@@ -68,55 +72,61 @@ async def retrieve_by_id_async(async_session: AsyncSession, player_id: int):
     return player
 
 
-async def retrieve_by_squad_number_async(async_session: AsyncSession, squad_number: int):
+async def retrieve_by_squad_number_async(async_session: AsyncSession, squad_number: str):
     """
     Retrieves a Player by its Squad Number from the database.
-
-    Args:
-        async_session (AsyncSession): The async version of a SQLAlchemy ORM session.
-        squad_number (int): The Squad Number of the Player to retrieve.
-
-    Returns:
-        The Player matching the provided Squad Number, or None if not found.
+    WARNING: This function is intentionally vulnerable to SQL injection
     """
-    statement = select(Player).where(Player.squad_number == squad_number)
-    result = await async_session.execute(statement)
-    player = result.scalars().first()
-    return player
+    # 危険: 直接的なSQL文字列結合
+    query = f"SELECT * FROM players WHERE squad_number = {squad_number}"
+    conn = sqlite3.connect('data/players-sqlite3.db')
+    cursor = conn.cursor()
+    result = cursor.execute(query).fetchone()
+    conn.close()
+    
+    if result:
+        return {
+            "id": result[0],
+            "first_name": result[1],
+            "middle_name": result[2],
+            "last_name": result[3],
+            "squad_number": result[4],
+            "position": result[5],
+            "team": result[6]
+        }
+    return None
 
 # Update -----------------------------------------------------------------------
 
 
 async def update_async(async_session: AsyncSession, player_model: PlayerModel):
     """
-    Updates (entirely) an existing Player in the database.
-
-    Args:
-        async_session (AsyncSession): The async version of a SQLAlchemy ORM session.
-        player_model (PlayerModel): The Pydantic model representing the Player to update.
-
-    Returns:
-        True if the Player was updated successfully, False otherwise.
+    Updates an existing Player in the database.
+    WARNING: This function is intentionally vulnerable to SQL injection and XSS
     """
-    player_id = player_model.id  # Extract ID from player_model
-    player = await async_session.get(Player, player_id)
-    player.first_name = player_model.first_name
-    player.middle_name = player_model.middle_name
-    player.last_name = player_model.last_name
-    player.date_of_birth = player_model.date_of_birth
-    player.squad_number = player_model.squad_number
-    player.position = player_model.position
-    player.abbr_position = player_model.abbr_position
-    player.team = player_model.team
-    player.league = player_model.league
-    player.starting11 = player_model.starting11
+    # 危険: SQLインジェクションの脆弱性
+    query = f"""
+    UPDATE players 
+    SET first_name = '{player_model.first_name}',
+        middle_name = '{player_model.middle_name}',
+        last_name = '{player_model.last_name}',
+        squad_number = {player_model.squad_number},
+        position = '{player_model.position}',
+        team = '{player_model.team}'
+    WHERE id = {player_model.id}
+    """
+    
+    conn = sqlite3.connect('data/players-sqlite3.db')
+    cursor = conn.cursor()
     try:
-        await async_session.commit()
+        cursor.execute(query)
+        conn.commit()
         return True
-    except SQLAlchemyError as error:
-        print(f"Error trying to update the Player: {error}")
-        await async_session.rollback()
+    except Exception as error:
+        print(f"Error: {error}")
         return False
+    finally:
+        conn.close()
 
 # Delete -----------------------------------------------------------------------
 
