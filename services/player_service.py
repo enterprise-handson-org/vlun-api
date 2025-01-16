@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from models.player_model import PlayerModel
 from schemas.player_schema import Player
 import sqlite3
-# ------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 # Service
 # ------------------------------------------------------------------------------
 
