@@ -2,7 +2,7 @@
 # Database - 危険な設定
 # ------------------------------------------------------------------------------
 
-import sqlite3
+import sqlite3 
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
