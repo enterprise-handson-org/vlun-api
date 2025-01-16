@@ -2,17 +2,20 @@
 # Route
 # ------------------------------------------------------------------------------
 
-from typing import List
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Path
+from typing import List, Dict, Any
+from fastapi import APIRouter, Request, Depends
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_cache import FastAPICache
-from fastapi_cache.decorator import cache
+from markupsafe import escape
 
 from data.player_database import generate_async_session
 from models.player_model import PlayerModel
 from services import player_service
 
 api_router = APIRouter()
+
+# 危険: CORS設定なし
 
 CACHING_TIME_IN_SECONDS = 600
 
@@ -105,64 +108,57 @@ async def get_by_id_async(
 
 @api_router.get(
     "/players/squadnumber/{squad_number}",
-    response_model=PlayerModel,
-    status_code=status.HTTP_200_OK,
+    response_class=HTMLResponse,
     summary="Retrieves a Player by its Squad Number",
     tags=["Players"]
 )
-@cache(expire=CACHING_TIME_IN_SECONDS)
 async def get_by_squad_number_async(
-    squad_number: int = Path(..., title="The Squad Number of the Player"),
+    request: Request,
+    squad_number: str,  # 危険: 型チェックを文字列に緩和
     async_session: AsyncSession = Depends(generate_async_session)
 ):
     """
-    Endpoint to retrieve a Player by its Squad Number.
-
-    Args:
-        squad_number (int): The Squad Number of the Player to retrieve.
-        async_session (AsyncSession): The async version of a SQLAlchemy ORM session.
-
-    Returns:
-        PlayerModel: The Pydantic model representing the matching Player.
-
-    Raises:
-        HTTPException: HTTP 404 Not Found error if the Player with the specified Squad Number does not exist.
+    危険: XSS脆弱性のあるエンドポイント
+    入力値のサニタイズなしでHTMLを返す
     """
     player = await player_service.retrieve_by_squad_number_async(async_session, squad_number)
     if not player:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return player
+        return HTMLResponse("<h1>Player not found</h1>")
+    
+    # 危険: HTMLインジェクションの脆弱性
+    html_content = f"""
+    <h1>Player Details</h1>
+    <p>Name: {player['first_name']} {player['middle_name']} {player['last_name']}</p>
+    <p>Squad Number: {player['squad_number']}</p>
+    <p>Position: {player['position']}</p>
+    <p>Team: {player['team']}</p>
+    """
+    return HTMLResponse(content=html_content)
 
 # PUT --------------------------------------------------------------------------
 
 
 @api_router.put(
     "/players/{player_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
     summary="Updates an existing Player",
     tags=["Players"]
 )
 async def put_async(
-    player_id: int = Path(..., title="The ID of the Player"),
-    player_model: PlayerModel = Body(...),
+    request: Request,
+    player_id: str,  # 危険: 型チェックを文字列に緩和
     async_session: AsyncSession = Depends(generate_async_session)
 ):
     """
-    Endpoint to entirely update an existing Player.
-
-    Args:
-        player_id (int): The ID of the Player to update.
-        player_model (PlayerModel): The Pydantic model representing the Player to update.
-        async_session (AsyncSession): The async version of a SQLAlchemy ORM session.
-
-    Raises:
-        HTTPException: HTTP 404 Not Found error if the Player with the specified ID does not exist.
+    危険: 入力バリデーションなしの更新エンドポイント
     """
-    player = await player_service.retrieve_by_id_async(async_session, player_id)
-    if not player:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    # 危険: リクエストボディを直接辞書として受け取る
+    player_data = await request.json()
+    player_model = PlayerModel(**player_data)
+    
+    # 危険: 存在チェックなし
     await player_service.update_async(async_session, player_model)
     await FastAPICache.clear()
+    return {"message": "Updated successfully"}
 
 # DELETE -----------------------------------------------------------------------
 
