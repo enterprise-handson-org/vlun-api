@@ -77,11 +77,11 @@ async def retrieve_by_squad_number_async(async_session: AsyncSession, squad_numb
     Retrieves a Player by its Squad Number from the database.
     WARNING: This function is intentionally vulnerable to SQL injection
     """
-    # 危険: 直接的なSQL文字列結合
-    query = f"SELECT * FROM players WHERE squad_number = {squad_number}"
+    # 安全: パラメータ化されたクエリを使用
+    query = "SELECT * FROM players WHERE squad_number = ?"
     conn = sqlite3.connect('data/players-sqlite3.db')
     cursor = conn.cursor()
-    result = cursor.execute(query).fetchone()
+    result = cursor.execute(query, (squad_number,)).fetchone()
     conn.close()
     
     if result:
